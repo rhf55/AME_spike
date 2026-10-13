@@ -1,15 +1,17 @@
 # AMEspike C examples
 
-The GEMM testcases, matrix inputs, Host/reference calculations, and instruction
+The operator testcases, matrix inputs, Host/reference calculations, and instruction
 audit come from AME_gem5. The build and bare-metal runtime target AMEspike.
 
-The suite matches the three cases in `AME_gem5/example`:
+The suite matches the four cases in `AME_gem5/example` at commit
+`369dbe8d2b99f4789ee170ea9f69401e92cb823f` (2026-10-12):
 
 | Case | Computation | Default size |
 | --- | --- | --- |
 | `gemm_fp32` | FP32 GEMM, `C += A x B` | N=128 |
 | `gemm_int8` | INT8 GEMM with INT32 accumulator and INT32 → INT64 → INT32 conversion | N=128 |
 | `gemm_mixed` | INT8 × INT8 → INT32 widening GEMM | N=128 |
+| `gelu` | Base-2 sigmoid GELU approximation, `x / (1 + 2^(-2x))` | 4×4 FP32 tile |
 
 Run from the repository root:
 
@@ -18,26 +20,33 @@ make -C example build
 make -C example/gemm_fp32 run SPIKE="$PWD/build/spike"
 make -C example gemm_int8 SPIKE="$PWD/build/spike"
 make -C example gemm_mixed SPIKE="$PWD/build/spike"
+make -C example gelu SPIKE="$PWD/build/spike"
 make -C example test SPIKE="$PWD/build/spike"
 make -C example/gemm_fp32 test-host-golden SPIKE="$PWD/build/spike"
 make -C example/gemm_fp32 test-reference SPIKE="$PWD/build/spike"
 ```
 
-All three default testcases use the original generated N=128 matrices.
+All three default GEMM testcases use the original generated N=128 matrices.
 For `gemm_fp32`, `test-host-golden` and `test-reference` use the unchanged N=8
 JSON configuration. Its `MATRIX_INPUT`, `MATRIX_REFERENCE`, and
 `GOLDEN=host|reference` options remain available. The two integer cases use
 their generated matrices and Host C golden.
+
+`gelu` retains the upstream inputs (16 values repeating -2, -1, 0, 1, 2)
+and Host C golden. It is an approximation, not the exact erf-based GELU.
+The instruction audit covers `mls.rm`, `mss.rm`, `msqrt.ew`, `mmul.ew`,
+`msub.ew`, `mexp2.ew`, `madd.ew`, and `mrec.ew`.
 
 Terminal output follows gem5's `[TEST]`, `[PASS]`/`[FAIL]`, and `[RESULT]`
 format. The backend is correctly labeled `Spike` rather than `MinorCPU`.
 A successful `make -C example test` ends with:
 
 ```text
-[RESULT] example suite: PASS (3/3 cases passed)
+[RESULT] example suite: PASS (4/4 cases passed)
          PASS: gemm_fp32
          PASS: gemm_int8
          PASS: gemm_mixed
+         PASS: gelu
 [PASS] suite report: .../example/build/reports/EXAMPLE_REPORT.md
 ```
 
